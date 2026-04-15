@@ -47,6 +47,8 @@
   .ppt-rank .n { font-size:22px; color:var(--primary); width:32px; }
   .badge-best { background:#10b981; color:#fff; padding:3px 10px; border-radius:10px; font-size:12px; }
   .badge-worst { background:#f59e0b; color:#fff; padding:3px 10px; border-radius:10px; font-size:12px; }
+  .toast { position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:#10b981; color:#fff; padding:12px 24px; border-radius:8px; font-size:15px; font-weight:600; opacity:0; transition:opacity .3s; pointer-events:none; box-shadow:0 4px 12px rgba(0,0,0,.15); }
+  .toast.show { opacity:1; }
 </style>
 </head>
 <body>
@@ -109,11 +111,12 @@
 
   <div class="pane" id="pane-ppt">
     <div class="card">
-      <button class="primary" onclick="loadPPT()">重新生成摘要</button>
+      <button class="primary" onclick="loadPPT(true)">重新生成摘要</button>
     </div>
     <div id="pptContent"></div>
   </div>
 </main>
+<div class="toast" id="toast"></div>
 
 <script>
 const tabs = document.querySelectorAll(".tab");
@@ -232,7 +235,14 @@ async function loadRanking() {
   document.getElementById("perMemberTable").innerHTML = table;
 }
 
-async function loadPPT() {
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2000);
+}
+
+async function loadPPT(showNotice) {
   const r = await fetch("/api/admin/rankings");
   const j = await r.json();
   const top = j.rankings[0];
@@ -263,6 +273,7 @@ async function loadPPT() {
     </div>
   `;
   document.getElementById("pptContent").innerHTML = html;
+  if (showNotice) showToast("✓ 已更新");
 }
 </script>
 </body>
