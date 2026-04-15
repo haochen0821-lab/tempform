@@ -79,7 +79,7 @@
       <label>Q5a · 你認為表現最優秀的組別</label>
       <select id="bestGroup">
         <option value="">— 請選擇 —</option>
-        {% for g in groups %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+        {% for g in groups if g != '第2組' %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
       </select>
       <textarea id="bestReason" placeholder="原因說明…" style="margin-top:8px;"></textarea>
     </div>
@@ -87,7 +87,7 @@
       <label>Q5b · 你認為最需優化的組別</label>
       <select id="worstGroup">
         <option value="">— 請選擇 —</option>
-        {% for g in groups %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+        {% for g in groups if g != '第2組' %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
       </select>
       <textarea id="worstReason" placeholder="原因說明…" style="margin-top:8px;"></textarea>
     </div>
@@ -255,6 +255,8 @@ function validate() {
       if (!gd.q3[r] || gd.q3[r] < 1) missing.push({sel:`.stars[data-g="${g}"][data-r="${r}"]`, label:`${g} Q3 ${r}`});
     });
   });
+  if (state.overall.best_group === "第2組") { state.overall.best_group=""; document.getElementById("bestGroup").value=""; }
+  if (state.overall.worst_group === "第2組") { state.overall.worst_group=""; document.getElementById("worstGroup").value=""; }
   if (!state.overall.best_group) missing.push({id:"bestGroup", label:"Q5a 最優秀組別"});
   if (!state.overall.best_reason.trim()) missing.push({id:"bestReason", label:"Q5a 最優秀組別原因"});
   if (!state.overall.worst_group) missing.push({id:"worstGroup", label:"Q5b 最需優化組別"});
