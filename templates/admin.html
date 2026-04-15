@@ -142,6 +142,7 @@ async function loadOverview() {
 }
 loadOverview();
 setInterval(loadOverview, 30000);
+setInterval(() => { if (document.getElementById("pane-ppt").classList.contains("active")) loadPPT(); }, 3600000);
 
 async function loadMemberDetail(code) {
   const detail = document.getElementById("memberDetail");
