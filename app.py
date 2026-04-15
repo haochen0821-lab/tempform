@@ -84,6 +84,11 @@ def index():
     return redirect(url_for("form_page"))
 
 
+def _is_admin():
+    code = session.get("code")
+    return bool(code) and MEMBERS.get(code, {}).get("role") == "admin"
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -105,30 +110,36 @@ def logout():
 @app.route("/form")
 @login_required
 def form_page():
-    code = session["code"]
-    sub = Submission.query.filter_by(member_code=code).first()
+    me = session["code"]
+    target = request.args.get("as", "").strip()
+    if target and target != me:
+        if not _is_admin():
+            return abort(403)
+        if target not in MEMBERS:
+            return abort(404)
+        edit_code = target
+        admin_editing = True
+    else:
+        edit_code = me
+        admin_editing = False
+
+    sub = Submission.query.filter_by(member_code=edit_code).first()
     payload = json.loads(sub.payload) if sub else {}
     status = sub.status if sub else "new"
     return render_template(
         "form.html",
-        code=code,
-        name=MEMBERS[code]["name"],
+        code=edit_code,
+        name=MEMBERS[edit_code]["name"],
         groups=GROUPS,
         rubric=RUBRIC,
         payload=payload,
         status=status,
+        admin_editing=admin_editing,
+        viewer_is_admin=_is_admin(),
     )
 
 
-@app.route("/api/save", methods=["POST"])
-@login_required
-def api_save():
-    code = session["code"]
-    data = request.get_json(silent=True) or {}
-    payload = data.get("payload") or {}
-    action = data.get("action", "draft")  # draft / submit
-    status = "submitted" if action == "submit" else "draft"
-
+def _save_submission(code, payload, status):
     sub = Submission.query.filter_by(member_code=code).first()
     if not sub:
         sub = Submission(member_code=code, member_name=MEMBERS[code]["name"])
@@ -138,7 +149,77 @@ def api_save():
     sub.status = status
     sub.updated_at = datetime.utcnow()
     db.session.commit()
+    return sub
+
+
+@app.route("/api/save", methods=["POST"])
+@login_required
+def api_save():
+    me = session["code"]
+    data = request.get_json(silent=True) or {}
+    payload = data.get("payload") or {}
+    action = data.get("action", "draft")  # draft / submit
+    target = (data.get("target_code") or me).strip()
+
+    if target != me:
+        if not _is_admin():
+            return jsonify({"error": "forbidden"}), 403
+        if target not in MEMBERS:
+            return jsonify({"error": "not found"}), 404
+
+    status = "submitted" if action == "submit" else "draft"
+    sub = _save_submission(target, payload, status)
     return jsonify({"ok": True, "status": status, "updated_at": sub.updated_at.strftime("%Y-%m-%d %H:%M:%S")})
+
+
+def _empty_payload():
+    return {
+        "groups": {g: {"q1": "", "q2": "", "q3": {r: 0 for r in RUBRIC}} for g in GROUPS},
+        "overall": {"best_group": "", "best_reason": "", "worst_group": "", "worst_reason": "", "self_review": ""},
+    }
+
+
+@app.route("/api/admin/member/<code>", methods=["DELETE"])
+@admin_required
+def api_admin_delete_member(code):
+    if code not in MEMBERS:
+        return jsonify({"error": "not found"}), 404
+    sub = Submission.query.filter_by(member_code=code).first()
+    if sub:
+        db.session.delete(sub)
+        db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/member/<code>/clear", methods=["POST"])
+@admin_required
+def api_admin_clear(code):
+    if code not in MEMBERS:
+        return jsonify({"error": "not found"}), 404
+    data = request.get_json(silent=True) or {}
+    scope = data.get("scope", "")  # "group:第1組" / "overall" / "all"
+    sub = Submission.query.filter_by(member_code=code).first()
+    if not sub:
+        return jsonify({"ok": True, "noop": True})
+    payload = json.loads(sub.payload or "{}")
+    base = _empty_payload()
+    payload.setdefault("groups", base["groups"])
+    payload.setdefault("overall", base["overall"])
+
+    if scope == "all":
+        payload = base
+    elif scope == "overall":
+        payload["overall"] = base["overall"]
+    elif scope.startswith("group:"):
+        g = scope.split(":", 1)[1]
+        if g not in GROUPS:
+            return jsonify({"error": "bad group"}), 400
+        payload["groups"][g] = {"q1": "", "q2": "", "q3": {r: 0 for r in RUBRIC}}
+    else:
+        return jsonify({"error": "bad scope"}), 400
+
+    _save_submission(code, payload, sub.status)
+    return jsonify({"ok": True})
 
 
 @app.route("/admin")

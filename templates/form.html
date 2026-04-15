@@ -47,15 +47,21 @@
 </head>
 <body>
 <header>
-  <h1>Tempform · 評分</h1>
+  <h1>Tempform · 評分{% if admin_editing %}（組長代填）{% endif %}</h1>
   <div class="right">
     <span>{{ name }} ({{ code }})</span>
     <span id="statusPill" class="status-pill status-{{ status }}">
       {% if status == 'submitted' %}已提交{% elif status == 'draft' %}草稿{% else %}未填{% endif %}
     </span>
+    {% if viewer_is_admin %}<a href="/admin">回管理後台</a>{% endif %}
     <a href="/logout">登出</a>
   </div>
 </header>
+{% if admin_editing %}
+<div style="background:#fef3c7;color:#92400e;padding:10px 20px;font-size:14px;text-align:center;border-bottom:1px solid #fde68a;">
+  ⚠ 你正以組長身份代為編輯 <strong>{{ name }}（{{ code }}）</strong> 的紀錄，所有修改會直接寫入該成員。
+</div>
+{% endif %}
 
 <main>
   <p style="color:var(--muted);font-size:14px;">請對<strong>第1組～第6組</strong>每組填寫四題，最後完成 Q5/Q6 整體評價。系統會自動儲存草稿。</p>
@@ -216,11 +222,12 @@ function toast(msg) {
   setTimeout(() => t.classList.remove("show"), 1800);
 }
 
+const TARGET_CODE = {{ code|tojson }};
 async function doSave(action, silent=false) {
   const res = await fetch("/api/save", {
     method:"POST",
     headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({ action, payload: state })
+    body: JSON.stringify({ action, payload: state, target_code: TARGET_CODE })
   });
   const j = await res.json();
   if (j.ok) {

@@ -52,7 +52,10 @@
 <body>
 <header>
   <h1>Tempform · 管理後台</h1>
-  <a href="/logout">登出</a>
+  <div style="display:flex;gap:14px;align-items:center;font-size:14px;">
+    <a href="/form" style="color:var(--primary);text-decoration:none;font-weight:600;">📝 填寫我的評分</a>
+    <a href="/logout" style="color:var(--primary);text-decoration:none;">登出</a>
+  </div>
 </header>
 <div class="tabs">
   <div class="tab active" data-pane="overview">總覽</div>
@@ -140,38 +143,64 @@ async function loadOverview() {
 loadOverview();
 setInterval(loadOverview, 30000);
 
-document.getElementById("memberSelect").onchange = async (e) => {
-  const code = e.target.value;
+async function loadMemberDetail(code) {
   const detail = document.getElementById("memberDetail");
   if (!code) { detail.innerHTML = ""; return; }
   const r = await fetch("/api/admin/member/" + code);
   const j = await r.json();
+  const editBtn = `<a href="/form?as=${code}" class="primary" style="text-decoration:none;display:inline-block;padding:8px 14px;border-radius:8px;background:var(--primary);color:#fff;font-size:14px;font-weight:600;">✏️ 編輯此成員紀錄</a>`;
+  const delBtn = `<button onclick="deleteMember('${code}','${j.name}')" style="background:#dc2626;color:#fff;border-color:#dc2626;">🗑 刪除整份紀錄</button>`;
+
   if (j.status === "none") {
-    detail.innerHTML = `<div class="card">${j.name} 尚未填寫</div>`;
+    detail.innerHTML = `<div class="card">${j.name} 尚未填寫 ${editBtn}</div>`;
     return;
   }
   const p = j.payload || {};
   const groups = p.groups || {};
   const overall = p.overall || {};
   let html = `<div class="card"><h3>${j.name} (${j.code}) · <span class="pill p-${j.status}">${j.status === 'submitted' ? '已提交' : '草稿'}</span></h3>`;
-  html += `<div style="color:var(--muted);font-size:13px;">最後更新：${j.updated_at || '—'}</div></div>`;
+  html += `<div style="color:var(--muted);font-size:13px;margin-bottom:10px;">最後更新：${j.updated_at || '—'}</div>`;
+  html += `<div style="display:flex;gap:8px;flex-wrap:wrap;">${editBtn} ${delBtn}</div></div>`;
+
   Object.entries(groups).forEach(([g, gd]) => {
     const q3 = gd.q3 || {};
     const vals = Object.values(q3).filter(v => v > 0);
     const avg = vals.length ? (vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(2) : "—";
-    html += `<div class="card group-block"><h4>${g} · 平均 ${avg}</h4>`;
+    html += `<div class="card group-block"><h4>${g} · 平均 ${avg}
+      <button onclick="clearScope('${code}','group:${g}','${g}')" style="float:right;font-size:12px;padding:4px 10px;background:#fee2e2;color:#991b1b;border-color:#fecaca;">清空此組</button>
+    </h4>`;
     html += `<div><b>亮點：</b>${gd.q1 || '—'}</div>`;
     html += `<div><b>優化：</b>${gd.q2 || '—'}</div>`;
     html += `<div style="margin-top:6px;">${Object.entries(q3).map(([k,v]) => `<div>${k}：<span class="stars-display">${'★'.repeat(v)}${'☆'.repeat(5-v)}</span> (${v})</div>`).join("")}</div>`;
     html += `</div>`;
   });
-  html += `<div class="card"><h3>整體評價</h3>`;
+  html += `<div class="card"><h3>整體評價
+    <button onclick="clearScope('${code}','overall','整體評價 (Q5/Q6)')" style="float:right;font-size:12px;padding:4px 10px;background:#fee2e2;color:#991b1b;border-color:#fecaca;">清空整體評價</button>
+  </h3>`;
   html += `<div><b>最優秀組別：</b>${overall.best_group || '—'}<div class="reason">${overall.best_reason || ''}</div></div>`;
   html += `<div><b>最需優化組別：</b>${overall.worst_group || '—'}<div class="reason">${overall.worst_reason || ''}</div></div>`;
   html += `<div><b>自組反思：</b><div class="reason">${overall.self_review || '—'}</div></div>`;
   html += `</div>`;
   detail.innerHTML = html;
-};
+}
+
+document.getElementById("memberSelect").onchange = (e) => loadMemberDetail(e.target.value);
+
+async function clearScope(code, scope, label) {
+  if (!confirm(`確定要清空「${label}」嗎？此動作無法復原。`)) return;
+  const r = await fetch(`/api/admin/member/${code}/clear`, {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({scope})
+  });
+  if ((await r.json()).ok) { loadMemberDetail(code); loadOverview(); }
+}
+
+async function deleteMember(code, name) {
+  if (!confirm(`確定要刪除 ${name} 的整份紀錄嗎？此動作無法復原。`)) return;
+  const r = await fetch(`/api/admin/member/${code}`, {method: "DELETE"});
+  if ((await r.json()).ok) { loadMemberDetail(code); loadOverview(); }
+}
 
 async function loadRanking() {
   const r = await fetch("/api/admin/rankings");
