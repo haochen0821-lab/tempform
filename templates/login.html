@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tempform · 登入</title>
+<style>
+  :root { --primary:#4f46e5; --bg:#f5f7fb; --card:#fff; --text:#1f2937; --muted:#6b7280; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,"Microsoft JhengHei","PingFang TC",sans-serif; background:var(--bg); color:var(--text); min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .card { background:var(--card); border-radius:16px; box-shadow:0 10px 40px rgba(0,0,0,.08); padding:32px; max-width:420px; width:100%; }
+  h1 { margin:0 0 4px; font-size:22px; }
+  p.sub { margin:0 0 24px; color:var(--muted); font-size:14px; }
+  .members { display:grid; gap:10px; }
+  button.member { background:#fff; border:2px solid #e5e7eb; padding:14px 16px; border-radius:12px; font-size:16px; cursor:pointer; text-align:left; display:flex; justify-content:space-between; align-items:center; transition:all .15s; }
+  button.member:hover { border-color:var(--primary); background:#eef2ff; }
+  button.member .code { color:var(--muted); font-size:13px; }
+  .err { color:#dc2626; font-size:14px; margin-top:12px; }
+  .footer { text-align:center; color:var(--muted); font-size:12px; margin-top:20px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Tempform · 同儕評分</h1>
+    <p class="sub">第2組課堂互評系統，請選擇您的代號登入</p>
+    <form method="post" class="members">
+      {% for code, info in members.items() %}
+        <button class="member" name="code" value="{{ code }}" type="submit">
+          <span>{{ info.name }}{% if info.role == 'admin' %} · 組長{% endif %}</span>
+          <span class="code">{{ code }}</span>
+        </button>
+      {% endfor %}
+    </form>
+    {% if error %}<div class="err">{{ error }}</div>{% endif %}
+    <div class="footer">DAYSPRING · 第2組</div>
+  </div>
+</body>
+</html>

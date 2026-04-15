@@ -1,0 +1,31 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/tempform
+            git pull origin main
+            docker build -t tempform .
+            docker stop tempform || true
+            docker rm tempform || true
+            docker run -d \
+              --name tempform \
+              --restart unless-stopped \
+              -p 5205:5205 \
+              -v /opt/tempform/data:/data \
+              tempform
+            docker ps | grep tempform

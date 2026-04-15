@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tempform · 管理後台</title>
+<style>
+  :root { --primary:#4f46e5; --bg:#f5f7fb; --card:#fff; --text:#1f2937; --muted:#6b7280; --gold:#fbbf24; --good:#10b981; --warn:#f59e0b; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,"Microsoft JhengHei","PingFang TC",sans-serif; background:var(--bg); color:var(--text); }
+  header { background:#fff; border-bottom:1px solid #e5e7eb; padding:14px 20px; display:flex; justify-content:space-between; align-items:center; }
+  header h1 { margin:0; font-size:18px; }
+  header a { color:var(--primary); text-decoration:none; font-size:14px; }
+  .tabs { display:flex; gap:4px; padding:0 20px; background:#fff; border-bottom:1px solid #e5e7eb; }
+  .tab { padding:12px 18px; cursor:pointer; border-bottom:3px solid transparent; font-size:14px; font-weight:600; color:var(--muted); }
+  .tab.active { color:var(--primary); border-color:var(--primary); }
+  main { max-width:1100px; margin:0 auto; padding:20px; }
+  .pane { display:none; }
+  .pane.active { display:block; }
+  .card { background:#fff; border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,.04); }
+  table { width:100%; border-collapse:collapse; }
+  th,td { text-align:left; padding:10px 12px; border-bottom:1px solid #f3f4f6; font-size:14px; }
+  th { background:#f9fafb; font-weight:600; color:var(--muted); }
+  .pill { padding:3px 10px; border-radius:10px; font-size:12px; font-weight:600; display:inline-block; }
+  .p-submitted { background:#d1fae5; color:#065f46; }
+  .p-draft { background:#fef3c7; color:#92400e; }
+  .p-none { background:#fee2e2; color:#991b1b; }
+  select, button { font-family:inherit; padding:8px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; background:#fff; cursor:pointer; }
+  button.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+  .rank-row { display:flex; align-items:center; gap:14px; padding:12px; border-radius:10px; background:#f9fafb; margin-bottom:8px; }
+  .rank-num { font-size:24px; font-weight:700; color:var(--primary); width:36px; text-align:center; }
+  .rank-name { flex:1; font-weight:600; }
+  .rank-score { font-size:18px; font-weight:700; color:var(--good); }
+  .rank-bar { flex:2; height:10px; background:#e5e7eb; border-radius:5px; overflow:hidden; }
+  .rank-bar-fill { height:100%; background:linear-gradient(90deg,#818cf8,#4f46e5); }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:720px) { .grid2 { grid-template-columns:1fr; } }
+  h3 { margin:0 0 10px; font-size:15px; color:var(--primary); }
+  .reason { font-size:13px; color:#374151; padding:8px 10px; background:#f9fafb; border-radius:6px; margin-bottom:6px; }
+  .reason b { color:var(--primary); }
+  .group-block { border:1px solid #e5e7eb; border-radius:10px; padding:12px; margin-bottom:10px; }
+  .group-block h4 { margin:0 0 6px; color:var(--primary); }
+  .stars-display { color:var(--gold); }
+  .ppt-slide { background:linear-gradient(135deg,#eef2ff,#fef3c7); border-radius:16px; padding:30px; margin-bottom:16px; }
+  .ppt-slide h2 { margin-top:0; color:var(--primary); }
+  .ppt-rank { display:flex; align-items:center; gap:14px; padding:10px 14px; background:rgba(255,255,255,.7); border-radius:10px; margin-bottom:8px; font-weight:600; }
+  .ppt-rank .n { font-size:22px; color:var(--primary); width:32px; }
+  .badge-best { background:#10b981; color:#fff; padding:3px 10px; border-radius:10px; font-size:12px; }
+  .badge-worst { background:#f59e0b; color:#fff; padding:3px 10px; border-radius:10px; font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Tempform · 管理後台</h1>
+  <a href="/logout">登出</a>
+</header>
+<div class="tabs">
+  <div class="tab active" data-pane="overview">總覽</div>
+  <div class="tab" data-pane="member">個人填寫</div>
+  <div class="tab" data-pane="ranking">排名評分</div>
+  <div class="tab" data-pane="ppt">PPT 摘要</div>
+</div>
+
+<main>
+  <div class="pane active" id="pane-overview">
+    <div class="card">
+      <h3>成員提交狀況（每 30 秒自動更新）</h3>
+      <table>
+        <thead><tr><th>代號</th><th>姓名</th><th>角色</th><th>狀態</th><th>更新時間</th></tr></thead>
+        <tbody id="overviewBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="pane" id="pane-member">
+    <div class="card">
+      <h3>選擇成員</h3>
+      <select id="memberSelect">
+        <option value="">— 請選擇 —</option>
+        {% for code, info in members.items() %}<option value="{{ code }}">{{ code }} {{ info.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div id="memberDetail"></div>
+  </div>
+
+  <div class="pane" id="pane-ranking">
+    <div class="card">
+      <h3>各組平均評分排名</h3>
+      <div id="rankingList"></div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h3>最優秀組別投票</h3>
+        <div id="bestVotes"></div>
+      </div>
+      <div class="card">
+        <h3>最需優化組別投票</h3>
+        <div id="worstVotes"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>個人給分一覽（每位成員對各組的平均分）</h3>
+      <table id="perMemberTable"></table>
+    </div>
+  </div>
+
+  <div class="pane" id="pane-ppt">
+    <div class="card">
+      <button class="primary" onclick="loadPPT()">重新生成摘要</button>
+    </div>
+    <div id="pptContent"></div>
+  </div>
+</main>
+
+<script>
+const tabs = document.querySelectorAll(".tab");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => x.classList.remove("active"));
+  document.querySelectorAll(".pane").forEach(p => p.classList.remove("active"));
+  t.classList.add("active");
+  document.getElementById("pane-" + t.dataset.pane).classList.add("active");
+  if (t.dataset.pane === "ranking") loadRanking();
+  if (t.dataset.pane === "ppt") loadPPT();
+});
+
+async function loadOverview() {
+  const r = await fetch("/api/admin/overview");
+  const j = await r.json();
+  const body = document.getElementById("overviewBody");
+  body.innerHTML = j.rows.map(row => `
+    <tr>
+      <td>${row.code}</td>
+      <td>${row.name}</td>
+      <td>${row.role === 'admin' ? '組長' : '成員'}</td>
+      <td><span class="pill p-${row.status}">${row.status === 'submitted' ? '已提交' : (row.status === 'draft' ? '草稿' : '未填')}</span></td>
+      <td>${row.updated_at || '—'}</td>
+    </tr>
+  `).join("");
+}
+loadOverview();
+setInterval(loadOverview, 30000);
+
+document.getElementById("memberSelect").onchange = async (e) => {
+  const code = e.target.value;
+  const detail = document.getElementById("memberDetail");
+  if (!code) { detail.innerHTML = ""; return; }
+  const r = await fetch("/api/admin/member/" + code);
+  const j = await r.json();
+  if (j.status === "none") {
+    detail.innerHTML = `<div class="card">${j.name} 尚未填寫</div>`;
+    return;
+  }
+  const p = j.payload || {};
+  const groups = p.groups || {};
+  const overall = p.overall || {};
+  let html = `<div class="card"><h3>${j.name} (${j.code}) · <span class="pill p-${j.status}">${j.status === 'submitted' ? '已提交' : '草稿'}</span></h3>`;
+  html += `<div style="color:var(--muted);font-size:13px;">最後更新：${j.updated_at || '—'}</div></div>`;
+  Object.entries(groups).forEach(([g, gd]) => {
+    const q3 = gd.q3 || {};
+    const vals = Object.values(q3).filter(v => v > 0);
+    const avg = vals.length ? (vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(2) : "—";
+    html += `<div class="card group-block"><h4>${g} · 平均 ${avg}</h4>`;
+    html += `<div><b>亮點：</b>${gd.q1 || '—'}</div>`;
+    html += `<div><b>優化：</b>${gd.q2 || '—'}</div>`;
+    html += `<div style="margin-top:6px;">${Object.entries(q3).map(([k,v]) => `<div>${k}：<span class="stars-display">${'★'.repeat(v)}${'☆'.repeat(5-v)}</span> (${v})</div>`).join("")}</div>`;
+    html += `</div>`;
+  });
+  html += `<div class="card"><h3>整體評價</h3>`;
+  html += `<div><b>最優秀組別：</b>${overall.best_group || '—'}<div class="reason">${overall.best_reason || ''}</div></div>`;
+  html += `<div><b>最需優化組別：</b>${overall.worst_group || '—'}<div class="reason">${overall.worst_reason || ''}</div></div>`;
+  html += `<div><b>自組反思：</b><div class="reason">${overall.self_review || '—'}</div></div>`;
+  html += `</div>`;
+  detail.innerHTML = html;
+};
+
+async function loadRanking() {
+  const r = await fetch("/api/admin/rankings");
+  const j = await r.json();
+  const max = Math.max(...j.rankings.map(x => x.score), 1);
+  document.getElementById("rankingList").innerHTML = j.rankings.map((x,i) => `
+    <div class="rank-row">
+      <div class="rank-num">${i+1}</div>
+      <div class="rank-name">${x.group}</div>
+      <div class="rank-bar"><div class="rank-bar-fill" style="width:${(x.score/5*100).toFixed(0)}%"></div></div>
+      <div class="rank-score">${x.score.toFixed(2)}</div>
+      <div style="font-size:12px;color:var(--muted);">(${x.voters}人評)</div>
+    </div>
+  `).join("");
+
+  const renderVotes = (obj) => Object.entries(obj).sort((a,b)=>b[1]-a[1]).map(([g,n]) => `<div class="reason"><b>${g}</b>：${n} 票</div>`).join("") || "<div class='reason'>—</div>";
+  document.getElementById("bestVotes").innerHTML = renderVotes(j.best_votes) +
+    j.best_reasons.map(r => `<div class="reason"><b>${r.by}</b> 推薦 ${r.group}：${r.reason}</div>`).join("");
+  document.getElementById("worstVotes").innerHTML = renderVotes(j.worst_votes) +
+    j.worst_reasons.map(r => `<div class="reason"><b>${r.by}</b> 認為 ${r.group}：${r.reason}</div>`).join("");
+
+  const groups = j.rankings.map(x => x.group);
+  let table = "<thead><tr><th>成員 \\ 組別</th>" + groups.map(g => `<th>${g}</th>`).join("") + "</tr></thead><tbody>";
+  j.per_member.forEach(m => {
+    table += `<tr><td>${m.name}</td>` + groups.map(g => `<td>${(m.groups[g] || 0).toFixed(2)}</td>`).join("") + "</tr>";
+  });
+  table += "</tbody>";
+  document.getElementById("perMemberTable").innerHTML = table;
+}
+
+async function loadPPT() {
+  const r = await fetch("/api/admin/rankings");
+  const j = await r.json();
+  const top = j.rankings[0];
+  const last = j.rankings[j.rankings.length - 1];
+  let html = `
+    <div class="ppt-slide">
+      <h2>第2組 · 同儕評分總覽</h2>
+      <p>由 5 位成員針對第1～6組進行 5 維度評分</p>
+      ${j.rankings.map((x,i) => `
+        <div class="ppt-rank">
+          <div class="n">${i+1}</div>
+          <div style="flex:1;">${x.group} ${i===0 ? '<span class="badge-best">最優秀</span>' : ''} ${i===j.rankings.length-1 ? '<span class="badge-worst">需優化</span>' : ''}</div>
+          <div style="color:var(--primary);">${x.score.toFixed(2)} / 5.00</div>
+        </div>
+      `).join("")}
+    </div>
+    <div class="ppt-slide">
+      <h2>最優秀：${top ? top.group : '—'}</h2>
+      ${j.best_reasons.filter(r => r.group === (top && top.group)).map(r => `<div class="reason"><b>${r.by}：</b>${r.reason}</div>`).join("") || '<div class="reason">—</div>'}
+    </div>
+    <div class="ppt-slide">
+      <h2>最需優化：${last ? last.group : '—'}</h2>
+      ${j.worst_reasons.filter(r => r.group === (last && last.group)).map(r => `<div class="reason"><b>${r.by}：</b>${r.reason}</div>`).join("") || '<div class="reason">—</div>'}
+    </div>
+    <div class="ppt-slide">
+      <h2>第2組自評反思</h2>
+      ${j.self_reviews.map(r => `<div class="reason"><b>${r.by}：</b>${r.text}</div>`).join("") || '<div class="reason">—</div>'}
+    </div>
+  `;
+  document.getElementById("pptContent").innerHTML = html;
+}
+</script>
+</body>
+</html>
