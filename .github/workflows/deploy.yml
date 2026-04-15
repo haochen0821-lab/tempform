@@ -27,5 +27,6 @@ jobs:
               --restart unless-stopped \
               -p 5205:5205 \
               -v /opt/tempform/data:/data \
+              --env-file /opt/tempform/.env \
               tempform
             docker ps | grep tempform

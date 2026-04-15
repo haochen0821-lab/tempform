@@ -64,6 +64,7 @@
   <div class="tab" data-pane="member">個人填寫</div>
   <div class="tab" data-pane="ranking">排名評分</div>
   <div class="tab" data-pane="ppt">PPT 摘要</div>
+  <div class="tab" data-pane="ai">🪄 AI 綜合摘要</div>
 </div>
 
 <main>
@@ -109,6 +110,15 @@
     </div>
   </div>
 
+  <div class="pane" id="pane-ai">
+    <div class="card">
+      <button class="primary" id="aiGenBtn" onclick="genAISummary()">🪄 一鍵整合大家的意見</button>
+      <span id="aiMeta" style="margin-left:14px;color:var(--muted);font-size:13px;"></span>
+      <div style="margin-top:8px;font-size:13px;color:var(--muted);">由 Claude AI 將 5 位成員對每組的質化意見、Q5/Q6 整合為一段綜合性結論。每次生成約 5～10 秒。</div>
+    </div>
+    <div id="aiContent"></div>
+  </div>
+
   <div class="pane" id="pane-ppt">
     <div class="card">
       <button class="primary" onclick="loadPPT(true)">重新生成摘要</button>
@@ -127,7 +137,55 @@ tabs.forEach(t => t.onclick = () => {
   document.getElementById("pane-" + t.dataset.pane).classList.add("active");
   if (t.dataset.pane === "ranking") loadRanking();
   if (t.dataset.pane === "ppt") loadPPT();
+  if (t.dataset.pane === "ai") loadAISummary();
 });
+
+async function loadAISummary() {
+  const r = await fetch("/api/admin/ai_summary");
+  const j = await r.json();
+  if (j.summary) renderAISummary(j.summary, j.created_at);
+  else document.getElementById("aiMeta").textContent = "尚未生成過摘要";
+}
+
+function renderAISummary(s, ts) {
+  document.getElementById("aiMeta").textContent = "上次生成：" + (ts || "—");
+  const groups = s.groups || {};
+  let html = "";
+  Object.entries(groups).forEach(([g, gd]) => {
+    html += `<div class="card"><h3>${g}</h3>
+      <div style="margin-bottom:10px;"><b style="color:var(--good);">✨ 綜合亮點</b><div class="reason">${gd.highlights || '—'}</div></div>
+      <div><b style="color:var(--warn);">🔧 綜合優化建議</b><div class="reason">${gd.improvements || '—'}</div></div>
+    </div>`;
+  });
+  html += `<div class="card" style="background:linear-gradient(135deg,#ecfdf5,#f0fdf4);">
+    <h3>🏆 全班最推薦組別 · 綜合理由</h3><div class="reason">${s.best_overall || '—'}</div>
+  </div>`;
+  html += `<div class="card" style="background:linear-gradient(135deg,#fef3c7,#fffbeb);">
+    <h3>⚠️ 全班最需優化組別 · 綜合理由</h3><div class="reason">${s.worst_overall || '—'}</div>
+  </div>`;
+  html += `<div class="card" style="background:linear-gradient(135deg,#eef2ff,#f5f3ff);">
+    <h3>🪞 第2組自我反思 · 綜合摘要</h3><div class="reason">${s.self_reflection || '—'}</div>
+  </div>`;
+  document.getElementById("aiContent").innerHTML = html;
+}
+
+async function genAISummary() {
+  const btn = document.getElementById("aiGenBtn");
+  btn.disabled = true;
+  btn.textContent = "🪄 AI 思考中…（約 5～10 秒）";
+  try {
+    const r = await fetch("/api/admin/ai_summary", {method:"POST"});
+    const j = await r.json();
+    if (j.error) { showToast("⚠ " + j.error); return; }
+    renderAISummary(j.summary, j.created_at);
+    showToast("✓ AI 綜合摘要已生成");
+  } catch(e) {
+    showToast("⚠ 生成失敗：" + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "🪄 一鍵整合大家的意見";
+  }
+}
 
 async function loadOverview() {
   const r = await fetch("/api/admin/overview");
