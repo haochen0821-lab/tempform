@@ -170,6 +170,9 @@ function renderAISummary(s, ts) {
 }
 
 async function genAISummary() {
+  const pw = prompt("請輸入密碼以執行 AI 整合：");
+  if (pw === null) return;
+  if (pw !== "001") { showToast("⚠ 密碼錯誤"); return; }
   const btn = document.getElementById("aiGenBtn");
   btn.disabled = true;
   btn.textContent = "🪄 AI 思考中…（約 5～10 秒）";
