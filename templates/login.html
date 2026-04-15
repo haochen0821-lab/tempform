@@ -26,13 +26,13 @@
     <form method="post" class="members">
       {% for code, info in members.items() %}
         <button class="member" name="code" value="{{ code }}" type="submit">
-          <span>{{ info.name }}{% if info.role == 'admin' %} · 組長{% endif %}</span>
+          <span>{{ info.name }}</span>
           <span class="code">{{ code }}</span>
         </button>
       {% endfor %}
     </form>
     {% if error %}<div class="err">{{ error }}</div>{% endif %}
-    <div class="footer">DAYSPRING · 第2組</div>
+    <div class="footer">第2組</div>
   </div>
 </body>
 </html>
