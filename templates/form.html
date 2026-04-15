@@ -41,8 +41,13 @@
   .status-draft { background:#fef3c7; color:#92400e; }
   .status-submitted { background:#d1fae5; color:#065f46; }
   .status-new { background:#e5e7eb; color:#374151; }
-  .toast { position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:#1f2937; color:#fff; padding:10px 20px; border-radius:8px; font-size:14px; opacity:0; transition:opacity .3s; pointer-events:none; }
+  .toast { position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:#1f2937; color:#fff; padding:10px 20px; border-radius:8px; font-size:14px; opacity:0; transition:opacity .3s; pointer-events:none; max-width:90%; }
   .toast.show { opacity:1; }
+  .toast.err { background:#dc2626; }
+  .err-msg { color:#dc2626; font-size:13px; margin-top:4px; font-weight:600; }
+  .field.invalid textarea, .field.invalid select { border-color:#dc2626; background:#fef2f2; }
+  .rubric-row.invalid .name { color:#dc2626; }
+  .rubric-row.invalid .stars { box-shadow:0 0 0 2px #fecaca; border-radius:6px; padding:2px 4px; }
 </style>
 </head>
 <body>
@@ -211,6 +216,7 @@ function bindOverall() {
 
 let saveTimer = null;
 function autosave() {
+  if (document.querySelector(".field.invalid, .rubric-row.invalid")) clearInvalidMarks();
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => doSave("draft", true), 800);
 }
@@ -238,11 +244,76 @@ async function doSave(action, silent=false) {
   }
 }
 
+function validate() {
+  // 回傳 missing 陣列 [{type:'group'/'overall', key, label}]
+  const missing = [];
+  GROUPS.forEach(g => {
+    const gd = state.groups[g];
+    if (!gd.q1.trim()) missing.push({sel:`textarea[data-g="${g}"][data-k="q1"]`, label:`${g} Q1 一句話亮點`});
+    if (!gd.q2.trim()) missing.push({sel:`textarea[data-g="${g}"][data-k="q2"]`, label:`${g} Q2 一句話優化`});
+    RUBRIC.forEach(r => {
+      if (!gd.q3[r] || gd.q3[r] < 1) missing.push({sel:`.stars[data-g="${g}"][data-r="${r}"]`, label:`${g} Q3 ${r}`});
+    });
+  });
+  if (!state.overall.best_group) missing.push({id:"bestGroup", label:"Q5a 最優秀組別"});
+  if (!state.overall.best_reason.trim()) missing.push({id:"bestReason", label:"Q5a 最優秀組別原因"});
+  if (!state.overall.worst_group) missing.push({id:"worstGroup", label:"Q5b 最需優化組別"});
+  if (!state.overall.worst_reason.trim()) missing.push({id:"worstReason", label:"Q5b 最需優化組別原因"});
+  if (!state.overall.self_review.trim()) missing.push({id:"selfReview", label:"Q6 自組反思"});
+  return missing;
+}
+
+function clearInvalidMarks() {
+  document.querySelectorAll(".field.invalid").forEach(el => el.classList.remove("invalid"));
+  document.querySelectorAll(".rubric-row.invalid").forEach(el => el.classList.remove("invalid"));
+  document.querySelectorAll(".err-msg").forEach(el => el.remove());
+}
+
+function markInvalid(missing) {
+  clearInvalidMarks();
+  missing.forEach(m => {
+    let el;
+    if (m.sel) el = document.querySelector(m.sel);
+    else if (m.id) el = document.getElementById(m.id);
+    if (!el) return;
+    if (el.classList.contains("stars")) {
+      el.closest(".rubric-row").classList.add("invalid");
+    } else {
+      const field = el.closest(".field");
+      if (field) {
+        field.classList.add("invalid");
+        if (!field.querySelector(".err-msg")) {
+          const e = document.createElement("div");
+          e.className = "err-msg";
+          e.textContent = "⚠ 此題尚未填寫";
+          field.appendChild(e);
+        }
+      }
+    }
+  });
+}
+
 document.getElementById("btnDraft").onclick = () => doSave("draft");
 document.getElementById("btnSubmit").onclick = () => {
-  if (!confirm("確定要提交嗎？提交後仍可再修改。")) return;
+  const missing = validate();
+  if (missing.length > 0) {
+    markInvalid(missing);
+    toastErr(`還有 ${missing.length} 題未完成，請補齊後再提交`);
+    // 捲到第一個未填處
+    const first = document.querySelector(".field.invalid, .rubric-row.invalid");
+    if (first) first.scrollIntoView({behavior:"smooth", block:"center"});
+    return;
+  }
+  if (!confirm("所有題目已完成，確定要提交嗎？提交後仍可再修改。")) return;
   doSave("submit");
 };
+
+function toastErr(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show","err");
+  setTimeout(() => { t.classList.remove("show"); setTimeout(()=>t.classList.remove("err"),300); }, 2600);
+}
 
 renderGroups();
 bindOverall();
