@@ -286,13 +286,13 @@ def _avg(nums):
 @admin_required
 def api_admin_rankings():
     subs = Submission.query.all()
-    # 對每個 group 收集每個成員給的 Q3 5項平均分
     group_member_avgs = {g: [] for g in GROUPS}
-    per_member = []  # 每位成員對每組的平均
+    group_rubric_scores = {g: {r: [] for r in RUBRIC} for g in GROUPS}
+    per_member = []
     for s in subs:
         payload = json.loads(s.payload or "{}")
         groups_data = payload.get("groups", {})
-        member_entry = {"code": s.member_code, "name": s.member_name, "groups": {}}
+        member_entry = {"code": s.member_code, "name": s.member_name, "groups": {}, "rubric_detail": {}}
         for g in GROUPS:
             gd = groups_data.get(g, {})
             scores = gd.get("q3", {}) or {}
@@ -301,11 +301,29 @@ def api_admin_rankings():
             if avg > 0:
                 group_member_avgs[g].append(avg)
             member_entry["groups"][g] = avg
+            rd = {}
+            for r in RUBRIC:
+                v = scores.get(r, 0)
+                if isinstance(v, (int, float)) and v > 0:
+                    group_rubric_scores[g][r].append(v)
+                rd[r] = v
+            member_entry["rubric_detail"][g] = rd
         per_member.append(member_entry)
 
     rankings = []
     for g in GROUPS:
-        rankings.append({"group": g, "score": _avg(group_member_avgs[g]), "voters": len(group_member_avgs[g])})
+        score = _avg(group_member_avgs[g])
+        rubric = {}
+        for r in RUBRIC:
+            a = _avg(group_rubric_scores[g][r])
+            rubric[r] = {"avg": a, "pct": round(a / 5 * 100, 1)}
+        rankings.append({
+            "group": g,
+            "score": score,
+            "pct": round(score / 5 * 100, 1),
+            "voters": len(group_member_avgs[g]),
+            "rubric": rubric,
+        })
     rankings.sort(key=lambda x: x["score"], reverse=True)
 
     # 收集 Q5 / Q6 整體評價
