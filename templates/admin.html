@@ -49,6 +49,10 @@
   .badge-worst { background:#f59e0b; color:#fff; padding:3px 10px; border-radius:10px; font-size:12px; }
   .toast { position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:#10b981; color:#fff; padding:12px 24px; border-radius:8px; font-size:15px; font-weight:600; opacity:0; transition:opacity .3s; pointer-events:none; box-shadow:0 4px 12px rgba(0,0,0,.15); }
   .toast.show { opacity:1; }
+  .tip-cell { position:relative; cursor:default; }
+  .tip-cell .tip-box { display:none; position:absolute; bottom:100%; left:50%; transform:translateX(-50%); background:#1f2937; color:#fff; padding:8px 12px; border-radius:8px; font-size:13px; white-space:nowrap; z-index:20; box-shadow:0 4px 12px rgba(0,0,0,.2); pointer-events:none; }
+  .tip-cell .tip-box::after { content:''; position:absolute; top:100%; left:50%; transform:translateX(-50%); border:6px solid transparent; border-top-color:#1f2937; }
+  .tip-cell:hover .tip-box { display:block; }
 </style>
 </head>
 <body>
@@ -289,6 +293,32 @@ async function loadRanking() {
     </div>
   `).join("");
 
+  // 建立 per_member lookup: group → rubric → [{name, score}]
+  const memberScores = {};
+  const memberAvgs = {};
+  j.per_member.forEach(m => {
+    Object.entries(m.rubric_detail || {}).forEach(([g, rd]) => {
+      if (!memberScores[g]) memberScores[g] = {};
+      Object.entries(rd).forEach(([r, v]) => {
+        if (!memberScores[g][r]) memberScores[g][r] = [];
+        memberScores[g][r].push({name: m.name, score: v});
+      });
+    });
+    Object.entries(m.groups || {}).forEach(([g, avg]) => {
+      if (!memberAvgs[g]) memberAvgs[g] = [];
+      memberAvgs[g].push({name: m.name, avg});
+    });
+  });
+
+  function tipHtml(items, label) {
+    const lines = items.map(i => `${i.name}：${'★'.repeat(i.score||0)}${'☆'.repeat(5-(i.score||0))} (${i.score||0})`).join('<br>');
+    return `<div class="tip-box">${lines}</div>`;
+  }
+  function tipAvgHtml(items) {
+    const lines = items.map(i => `${i.name}：${(i.avg||0).toFixed(2)}`).join('<br>');
+    return `<div class="tip-box">${lines}</div>`;
+  }
+
   // 五維度分析表
   let rt = `<thead><tr><th>組別</th>${RUBRIC.map(r=>`<th>${r}</th>`).join("")}<th style="background:#eef2ff;font-weight:700;">整體平均</th></tr></thead><tbody>`;
   j.rankings.forEach(x => {
@@ -296,10 +326,12 @@ async function loadRanking() {
     RUBRIC.forEach(r => {
       const d = x.rubric[r] || {avg:0,pct:0};
       const color = d.pct >= 80 ? 'var(--good)' : d.pct >= 60 ? 'var(--warn)' : '#dc2626';
-      rt += `<td><span style="font-weight:600;">${d.avg.toFixed(2)}</span><br><span style="font-size:12px;color:${color};">${d.pct.toFixed(1)}%</span></td>`;
+      const tips = (memberScores[x.group] && memberScores[x.group][r]) || [];
+      rt += `<td class="tip-cell"><span style="font-weight:600;">${d.avg.toFixed(2)}</span><br><span style="font-size:12px;color:${color};">${d.pct.toFixed(1)}%</span>${tipHtml(tips)}</td>`;
     });
     const oc = x.pct >= 80 ? 'var(--good)' : x.pct >= 60 ? 'var(--warn)' : '#dc2626';
-    rt += `<td style="background:#eef2ff;"><span style="font-weight:700;font-size:16px;">${x.score.toFixed(2)}</span><br><span style="font-size:13px;font-weight:700;color:${oc};">${x.pct.toFixed(1)}%</span></td></tr>`;
+    const avgTips = memberAvgs[x.group] || [];
+    rt += `<td class="tip-cell" style="background:#eef2ff;"><span style="font-weight:700;font-size:16px;">${x.score.toFixed(2)}</span><br><span style="font-size:13px;font-weight:700;color:${oc};">${x.pct.toFixed(1)}%</span>${tipAvgHtml(avgTips)}</td></tr>`;
   });
   rt += "</tbody>";
   document.getElementById("rubricTable").innerHTML = rt;
