@@ -17,4 +17,4 @@ VOLUME ["/data"]
 
 EXPOSE 5205
 
-CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:5205", "--access-logfile", "-", "app:app"]
+CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:5205", "--timeout", "120", "--access-logfile", "-", "app:app"]
