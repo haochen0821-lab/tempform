@@ -94,8 +94,11 @@
   </div>
 
   <div class="pane" id="pane-ranking">
+    <div class="card" style="display:flex;justify-content:space-between;align-items:center;">
+      <h3 style="margin:0;">各組平均評分排名</h3>
+      <button class="primary" onclick="exportPPT()" style="font-size:14px;">📊 一鍵匯出 PPT 簡報</button>
+    </div>
     <div class="card">
-      <h3>各組平均評分排名</h3>
       <div id="rankingList"></div>
     </div>
     <div class="card">
@@ -283,6 +286,11 @@ async function deleteMember(code, name) {
   if (!confirm(`確定要刪除 ${name} 的整份紀錄嗎？此動作無法復原。`)) return;
   const r = await fetch(`/api/admin/member/${code}`, {method: "DELETE"});
   if ((await r.json()).ok) { loadMemberDetail(code); loadOverview(); }
+}
+
+function exportPPT() {
+  showToast("⏳ 正在生成簡報…");
+  window.location.href = "/api/admin/export_ppt";
 }
 
 async function loadRanking() {

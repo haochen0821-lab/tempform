@@ -1,3 +1,4 @@
+import io
 import os
 import json
 from datetime import datetime
@@ -5,7 +6,7 @@ from functools import wraps
 
 from flask import (
     Flask, request, jsonify, render_template,
-    redirect, url_for, session, abort
+    redirect, url_for, session, abort, send_file
 )
 from flask_sqlalchemy import SQLAlchemy
 
@@ -463,6 +464,184 @@ def api_generate_ai_summary():
         db.session.delete(o)
     db.session.commit()
     return jsonify({"summary": result, "created_at": rec.created_at.strftime("%Y-%m-%d %H:%M:%S")})
+
+
+@app.route("/api/admin/export_ppt")
+@admin_required
+def api_admin_export_ppt():
+    from pptx import Presentation
+    from pptx.util import Inches, Pt, Emu
+    from pptx.dml.color import RGBColor
+    from pptx.enum.text import PP_ALIGN
+
+    subs = Submission.query.all()
+    group_rubric_scores = {g: {r: [] for r in RUBRIC} for g in GROUPS}
+    group_member_avgs = {g: [] for g in GROUPS}
+    per_member = []
+    for s in subs:
+        payload = json.loads(s.payload or "{}")
+        groups_data = payload.get("groups", {})
+        entry = {"name": s.member_name, "groups": {}}
+        for g in GROUPS:
+            gd = groups_data.get(g, {})
+            scores = gd.get("q3", {}) or {}
+            vals = [scores.get(k, 0) for k in RUBRIC]
+            avg = _avg(vals)
+            if avg > 0:
+                group_member_avgs[g].append(avg)
+            entry["groups"][g] = avg
+            for r in RUBRIC:
+                v = scores.get(r, 0)
+                if isinstance(v, (int, float)) and v > 0:
+                    group_rubric_scores[g][r].append(v)
+        per_member.append(entry)
+
+    rankings = []
+    for g in GROUPS:
+        score = _avg(group_member_avgs[g])
+        rubric = {}
+        for r in RUBRIC:
+            a = _avg(group_rubric_scores[g][r])
+            rubric[r] = a
+        rankings.append({"group": g, "score": score, "pct": round(score / 5 * 100, 1), "rubric": rubric})
+    rankings.sort(key=lambda x: x["score"], reverse=True)
+
+    prs = Presentation()
+    prs.slide_width = Inches(13.333)
+    prs.slide_height = Inches(7.5)
+    BG = RGBColor(0xF5, 0xF7, 0xFB)
+    PRIMARY = RGBColor(0x4F, 0x46, 0xE5)
+    WHITE = RGBColor(0xFF, 0xFF, 0xFF)
+    DARK = RGBColor(0x1F, 0x29, 0x37)
+    MUTED = RGBColor(0x6B, 0x72, 0x80)
+    GREEN = RGBColor(0x10, 0xB9, 0x81)
+    WARN = RGBColor(0xF5, 0x9E, 0x0B)
+    RED = RGBColor(0xDC, 0x26, 0x26)
+
+    def set_bg(slide, color):
+        bg = slide.background
+        fill = bg.fill
+        fill.solid()
+        fill.fore_color.rgb = color
+
+    def add_text(slide, left, top, width, height, text, size=14, bold=False, color=DARK, align=PP_ALIGN.LEFT):
+        txBox = slide.shapes.add_textbox(Inches(left), Inches(top), Inches(width), Inches(height))
+        tf = txBox.text_frame
+        tf.word_wrap = True
+        p = tf.paragraphs[0]
+        p.text = text
+        p.font.size = Pt(size)
+        p.font.bold = bold
+        p.font.color.rgb = color
+        p.alignment = align
+        return txBox
+
+    def color_for_pct(pct):
+        if pct >= 80:
+            return GREEN
+        elif pct >= 60:
+            return WARN
+        return RED
+
+    def set_cell(cell, text, size=11, bold=False, color=DARK, align=PP_ALIGN.CENTER):
+        cell.text = ""
+        p = cell.text_frame.paragraphs[0]
+        p.text = str(text)
+        p.font.size = Pt(size)
+        p.font.bold = bold
+        p.font.color.rgb = color
+        p.alignment = align
+        cell.margin_left = Emu(36000)
+        cell.margin_right = Emu(36000)
+        cell.margin_top = Emu(18000)
+        cell.margin_bottom = Emu(18000)
+
+    def fill_cell(cell, color):
+        cell.fill.solid()
+        cell.fill.fore_color.rgb = color
+
+    # === Slide 1: Title ===
+    slide1 = prs.slides.add_slide(prs.slide_layouts[6])
+    set_bg(slide1, BG)
+    add_text(slide1, 1, 2.2, 11, 1.2, "第2組 · 同儕評分結果", size=40, bold=True, color=PRIMARY, align=PP_ALIGN.CENTER)
+    add_text(slide1, 1, 3.6, 11, 0.6, "課堂分組報告互評 · 結構化五維度評分", size=20, color=MUTED, align=PP_ALIGN.CENTER)
+    add_text(slide1, 1, 4.5, 11, 0.5, datetime.utcnow().strftime("%Y-%m-%d"), size=16, color=MUTED, align=PP_ALIGN.CENTER)
+
+    # === Slide 2: Rankings + Rubric ===
+    slide2 = prs.slides.add_slide(prs.slide_layouts[6])
+    set_bg(slide2, BG)
+    add_text(slide2, 0.5, 0.3, 12, 0.5, "各組綜合評分排名 · 五維度分析", size=24, bold=True, color=PRIMARY)
+
+    cols = ["排名", "組別"] + RUBRIC + ["平均", "百分比"]
+    n_cols = len(cols)
+    n_rows = len(rankings) + 1
+    col_widths = [0.6, 1.0] + [1.3] * 5 + [1.0, 1.0]
+    total_w = sum(col_widths)
+    tbl_left = (13.333 - total_w) / 2
+
+    table_shape = slide2.shapes.add_table(n_rows, n_cols, Inches(tbl_left), Inches(1.0), Inches(total_w), Inches(0.45 * n_rows))
+    table = table_shape.table
+    for ci, w in enumerate(col_widths):
+        table.columns[ci].width = Inches(w)
+
+    for ci, h in enumerate(cols):
+        cell = table.cell(0, ci)
+        set_cell(cell, h, size=10, bold=True, color=WHITE)
+        fill_cell(cell, PRIMARY)
+
+    for ri, rk in enumerate(rankings):
+        row = ri + 1
+        set_cell(table.cell(row, 0), str(ri + 1), size=14, bold=True, color=PRIMARY)
+        set_cell(table.cell(row, 1), rk["group"], size=12, bold=True)
+        for di, dim in enumerate(RUBRIC):
+            a = rk["rubric"][dim]
+            pct = round(a / 5 * 100, 1)
+            set_cell(table.cell(row, 2 + di), f"{a:.2f}\n({pct:.0f}%)", size=10, color=color_for_pct(pct))
+        set_cell(table.cell(row, 7), f"{rk['score']:.2f}", size=12, bold=True, color=PRIMARY)
+        set_cell(table.cell(row, 8), f"{rk['pct']:.1f}%", size=12, bold=True, color=color_for_pct(rk["pct"]))
+        if ri % 2 == 0:
+            for ci in range(n_cols):
+                fill_cell(table.cell(row, ci), RGBColor(0xEE, 0xF2, 0xFF))
+
+    # === Slide 3: Per-member scores ===
+    slide3 = prs.slides.add_slide(prs.slide_layouts[6])
+    set_bg(slide3, BG)
+    add_text(slide3, 0.5, 0.3, 12, 0.5, "個人評分一覽（每位成員對各組的平均分）", size=24, bold=True, color=PRIMARY)
+
+    sorted_groups = [r["group"] for r in rankings]
+    m_cols = ["成員"] + sorted_groups
+    n_mc = len(m_cols)
+    n_mr = len(per_member) + 1
+    mc_widths = [1.6] + [1.5] * len(sorted_groups)
+    mc_total = sum(mc_widths)
+    mc_left = (13.333 - mc_total) / 2
+
+    m_shape = slide3.shapes.add_table(n_mr, n_mc, Inches(mc_left), Inches(1.0), Inches(mc_total), Inches(0.5 * n_mr))
+    m_table = m_shape.table
+    for ci, w in enumerate(mc_widths):
+        m_table.columns[ci].width = Inches(w)
+
+    for ci, h in enumerate(m_cols):
+        cell = m_table.cell(0, ci)
+        set_cell(cell, h, size=11, bold=True, color=WHITE)
+        fill_cell(cell, PRIMARY)
+
+    for mi, m in enumerate(per_member):
+        row = mi + 1
+        set_cell(m_table.cell(row, 0), m["name"], size=12, bold=True)
+        for gi, g in enumerate(sorted_groups):
+            avg = m["groups"].get(g, 0)
+            pct = round(avg / 5 * 100, 1) if avg else 0
+            set_cell(m_table.cell(row, 1 + gi), f"{avg:.2f}\n({pct:.0f}%)", size=11, color=color_for_pct(pct) if avg > 0 else MUTED)
+        if mi % 2 == 0:
+            for ci in range(n_mc):
+                fill_cell(m_table.cell(row, ci), RGBColor(0xEE, 0xF2, 0xFF))
+
+    buf = io.BytesIO()
+    prs.save(buf)
+    buf.seek(0)
+    fname = f"tempform_ranking_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.pptx"
+    return send_file(buf, as_attachment=True, download_name=fname, mimetype="application/vnd.openxmlformats-officedocument.presentationml.presentation")
 
 
 @app.route("/healthz")
