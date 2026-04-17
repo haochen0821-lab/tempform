@@ -163,8 +163,16 @@ function renderAISummary(s, ts) {
   let html = "";
   Object.entries(groups).forEach(([g, gd]) => {
     html += `<div class="card"><h3>${g}</h3>
-      <div style="margin-bottom:10px;"><b style="color:var(--good);">✨ 綜合亮點</b><div class="reason">${gd.highlights || '—'}</div></div>
-      <div><b style="color:var(--warn);">🔧 綜合優化建議</b><div class="reason">${gd.improvements || '—'}</div></div>
+      <div style="margin-bottom:10px;">
+        <b style="color:var(--good);">✨ 綜合亮點</b>
+        ${gd.highlights_summary ? `<div style="font-size:15px;font-weight:700;color:var(--good);margin:4px 0 2px;">「${gd.highlights_summary}」</div>` : ''}
+        <div class="reason">${gd.highlights || '—'}</div>
+      </div>
+      <div>
+        <b style="color:var(--warn);">🔧 綜合優化建議</b>
+        ${gd.improvements_summary ? `<div style="font-size:15px;font-weight:700;color:var(--warn);margin:4px 0 2px;">「${gd.improvements_summary}」</div>` : ''}
+        <div class="reason">${gd.improvements || '—'}</div>
+      </div>
     </div>`;
   });
   html += `<div class="card" style="background:linear-gradient(135deg,#ecfdf5,#f0fdf4);">
