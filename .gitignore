@@ -9,3 +9,6 @@ venv/
 .idea/
 .vscode/
 .DS_Store
+instance/
+database/
+*.sqlite3
